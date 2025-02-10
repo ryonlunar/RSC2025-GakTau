@@ -1,0 +1,6 @@
+int32 x
+int32 y
+float32 time
+---
+bool success
+string message

@@ -1,0 +1,13 @@
+# Goal
+int32 target_x
+int32 target_y
+---
+# Result
+bool success
+string message
+---
+# Feedback
+int32 current_x
+int32 current_y
+float32 remaining_energy
+int32 current_passengers
