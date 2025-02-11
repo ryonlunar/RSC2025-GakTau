@@ -97,7 +97,8 @@ class MapManager : public rclcpp::Node
             map_state_message_.height = msg->height;
             map_state_message_.grid_data = msg->grid_data;
             map_state_message_.path_numbers = msg->path_numbers;
-    
+            auto width = map_state_message_.width;
+            auto height = map_state_message_.height;
             std::cout << "=== Grid Map ===" << std::endl;
             for (int y = 0; y < height; ++y) {
                 for (int x = 0; x < width; ++x) {
