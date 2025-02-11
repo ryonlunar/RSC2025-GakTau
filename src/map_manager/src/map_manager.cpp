@@ -81,12 +81,22 @@ class MapManager : public rclcpp::Node
 
         void drone_position_callback(const uav_interfaces::msg::DroneStatus::SharedPtr drone_message)
         {   
-            map_state_message_.grid_data[drone_message->position.x * drone_message->position.y] = 2; //posisi drone
+            // untuk ubah posisi drone lama jadi angka dihandle drone_controller 
+            // if (previous_x != drone_message->position.x && previous_y != drone_message->position.y){
+            //     map_state_message_.grid_data[previous_x * previous_y] = 9999; //posisi drone lama ditinggalkan menjadi path numbers
+            //     map_state_message_.grid_data[drone_message->position.x * drone_message->position.y] = 2; //posisi drone baru
+            //     previous_x = drone_message->position.x;
+            //     previous_y = drone_message->position.y;
+            // }
+            map_state_message_.grid_data[drone_message->position.x * drone_message->position.y] = 2; //posisi drone baru
+
         }
 
         void path_visualization_callback(const uav_interfaces::msg::MapState::SharedPtr msg) {
-            int width = msg->width;
-            int height = msg->height;
+            map_state_message_.width = msg->width;
+            map_state_message_.height = msg->height;
+            map_state_message_.grid_data = msg->grid_data;
+            map_state_message_.path_numbers = msg->path_numbers;
     
             std::cout << "=== Grid Map ===" << std::endl;
             for (int y = 0; y < height; ++y) {
