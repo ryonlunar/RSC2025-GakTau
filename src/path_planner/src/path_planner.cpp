@@ -205,29 +205,29 @@ public:
         path_visualization_pub_ = this->create_publisher<uav_interfaces::msg::MapState>("path_visualization", 10);
 
         map_state_sub_ = this->create_subscription<uav_interfaces::msg::MapState>(
-            "map_state", 10, std::bind(&GridPubSub::initializeGrid, this, std::placeholders::_1)
+            "map_state", 10, std::bind(&GridPubSub::synchronizeGrid, this, std::placeholders::_1)
         );
    
     }
 
 private:
 
-    void initializeGrid(const uav_interfaces::msg::MapState::SharedPtr msg) {
+    void synchronizeGrid(const uav_interfaces::msg::MapState::SharedPtr msg) {
         grid.grid_data = msg->grid_data;
         grid.width = msg->width;
         grid.height = msg->height;
 
-        int sx = -1, sy = -1, gx = -1, gy = -1;
+        // int sx = -1, sy = -1, gx = -1, gy = -1;
 
-        for (int y = 0; y < grid.height; ++y) {
-            for (int x = 0; x < grid.width; ++x) {
-                int idx = grid.index(x, y);
-                if (grid.grid_data[idx] == 2) { sx = x; sy = y; }
-                if (grid.grid_data[idx] == 4) { gx = x; gy = y; }
-            }
-        }
+        // for (int y = 0; y < grid.height; ++y) {
+        //     for (int x = 0; x < grid.width; ++x) {
+        //         int idx = grid.index(x, y);
+        //         if (grid.grid_data[idx] == 2) { sx = x; sy = y; }
+        //         if (grid.grid_data[idx] == 4) { gx = x; gy = y; }
+        //     }
+        // }
 
-        publishPath(); // publish path (menampilkan map tiap 0.5 detik)
+        publishPath(); // publish path (menampilkan dan update map tiap 0.5 detik)
     }
 
     void publishPath() {
