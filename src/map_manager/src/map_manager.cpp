@@ -1,13 +1,14 @@
 #include <memory>
 #include <string>
 #include <iostream>
-
+#include <queue>
 #include "rclcpp/rclcpp.hpp"
 #include "uav_interfaces/msg/map_state.hpp"
 #include "uav_interfaces/msg/drone_status.hpp"
 #include "uav_interfaces/srv/add_victim.hpp"
 #include "uav_interfaces/srv/add_obstacle.hpp"
-
+#include "queue_obs.hpp"
+#include "queue_vic.hpp"
 
 class MapManager : public rclcpp::Node
 {
@@ -66,11 +67,20 @@ class MapManager : public rclcpp::Node
                 "/add_obstacle",
                 std::bind(&MapManager::handle_add_obstacle, this, std::placeholders::_1, std::placeholders::_2)
             );
+
+            obstacle_timer = this->create_wall_timer(std::chrono::milliseconds(100),std::bind(&MapManager::process_obstacle,this));
+            victim_timer = this->create_wall_timer(std::chrono::milliseconds(100),std::bind(&MapManager::process_victim,this));
         }
 
     private:
+    
+    std::priority_queue<obs> obs_queue_;
+    std::priority_queue<vic> vic_queue_;
     rclcpp::Service<uav_interfaces::srv::AddVictim>::SharedPtr add_victim_service_;
     rclcpp::Service<uav_interfaces::srv::AddObstacle>::SharedPtr add_obstacle_service_;
+    rclcpp::TimerBase::SharedPtr victim_timer;
+    rclcpp::TimerBase::SharedPtr obstacle_timer;
+    rclcpp::Time start_time_ = this->now();
 
         void drone_status_callback(const uav_interfaces::msg::DroneStatus::SharedPtr drone_message) const
         {   
@@ -119,45 +129,73 @@ class MapManager : public rclcpp::Node
         void handle_add_victim(
             const std::shared_ptr<uav_interfaces::srv::AddVictim::Request> request,
             std::shared_ptr<uav_interfaces::srv::AddVictim::Response> response) {
-            
             size_t idx = static_cast<size_t>(request->y) * map_state_message_.width + static_cast<size_t>(request->x);
 
-        
             if (idx >= map_state_message_.grid_data.size()) {
                 response->success = false;
                 response->message = "Koordinat korban di luar batas peta!";
                 return;
             }
-        
-            map_state_message_.grid_data[idx] = 4; // Tanda korban
-            RCLCPP_INFO(this->get_logger(), "Korban ditambahkan di (%d, %d)", request->x, request->y);
-        
+
+            vic_queue_.push(vic(request->x,request->y,request->time));
             response->success = true;
             response->message = "Korban berhasil ditambahkan!";
-            map_state_pub_->publish(map_state_message_);
         }
         
+        void process_victim(){
+            while( !vic_queue_.empty() ){
+                auto &new_vic = vic_queue_.top();
+                auto vic_time = start_time_ + rclcpp::Duration::from_seconds(new_vic.time);
+                auto now = this->now();
+
+                if( now >= vic_time ){
+                    size_t idx = static_cast<size_t>(new_vic.y) * map_state_message_.width + static_cast<size_t>(new_vic.x);
+            
+                    map_state_message_.grid_data[idx] = 4; // Tanda victim
+                    RCLCPP_INFO(this->get_logger(), "Korban ditambahkan di (%d, %d)", new_vic.x, new_vic.y);
+            
+                    map_state_pub_->publish(map_state_message_);
+                    vic_queue_.pop();
+                }
+
+                else break;
+            }
+        }
+
         void handle_add_obstacle(
             const std::shared_ptr<uav_interfaces::srv::AddObstacle::Request> request,
             std::shared_ptr<uav_interfaces::srv::AddObstacle::Response> response) {
-            
             size_t idx = static_cast<size_t>(request->y) * map_state_message_.width + static_cast<size_t>(request->x);
 
-        
             if (idx >= map_state_message_.grid_data.size()) {
                 response->success = false;
                 response->message = "Koordinat obstacle di luar batas peta!";
                 return;
             }
-        
-            map_state_message_.grid_data[idx] = 3; // Tanda obstacle
-            RCLCPP_INFO(this->get_logger(), "Obstacle ditambahkan di (%d, %d)", request->x, request->y);
-        
+            
+            obs_queue_.push(obs(request->x,request->y,request->time));
             response->success = true;
             response->message = "Obstacle berhasil ditambahkan!";
-            map_state_pub_->publish(map_state_message_);
         }
 
+        void process_obstacle(){
+            while( !obs_queue_.empty() ){
+                auto &new_obs = obs_queue_.top();
+                auto obs_time = start_time_ + rclcpp::Duration::from_seconds(new_obs.time);
+                auto now = this->now();
+                if( now >= obs_time ){
+                    size_t idx = static_cast<size_t>(new_obs.y) * map_state_message_.width + static_cast<size_t>(new_obs.x);
+            
+                    map_state_message_.grid_data[idx] = 3; // Tanda obstacle
+                    RCLCPP_INFO(this->get_logger(), "Obstacle ditambahkan di (%d, %d)", new_obs.x, new_obs.y);
+            
+                    map_state_pub_->publish(map_state_message_);
+                    obs_queue_.pop();
+                }
+
+                else break;
+            }
+        }
         rclcpp::Publisher<uav_interfaces::msg::MapState>::SharedPtr map_state_pub_;
         uav_interfaces::msg::MapState map_state_message_;
         rclcpp::Subscription<uav_interfaces::msg::DroneStatus>::SharedPtr drone_status_sub_;

@@ -55,7 +55,7 @@ private:
     }
 
     rclcpp_action::CancelResponse handle_cancel(
-        const std::shared_ptr<GoalHandleRescueMission> goal_handle) {
+        [[maybe_unused]] const std::shared_ptr<GoalHandleRescueMission> goal_handle) {
         RCLCPP_INFO(this->get_logger(), "Misi rescue dibatalkan");
         return rclcpp_action::CancelResponse::ACCEPT;
     }
