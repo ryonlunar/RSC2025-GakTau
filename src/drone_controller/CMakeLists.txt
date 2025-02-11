@@ -8,16 +8,24 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(uav_interfaces REQUIRED)
 
 add_executable(drone_controller_node src/drone_controller.cpp)
 install(TARGETS
   drone_controller_node
   DESTINATION lib/${PROJECT_NAME})
-
+  
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
+add_executable(drone_controller_node src/drone_controller.cpp)
+ament_target_dependencies(drone_controller_node rclcpp rclcpp_action uav_interfaces)
+
+install(TARGETS
+  drone_controller_node
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

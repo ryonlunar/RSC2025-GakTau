@@ -1,0 +1,14 @@
+// Untuk build
+colcon build --packages-select drone_controller
+
+// Untuk run
+ros2 run drone_controller drone_controller_node
+
+-> Buka terminal baru
+// Untuk cek action
+ros2 action list
+// Untuk cek tipe action
+ros2 action info /rescue_mission
+
+// Kirim perintah
+ros2 action send_goal /rescue_mission uav_interfaces/action/RescueMission "{target_x: 3, target_y: 4}"
