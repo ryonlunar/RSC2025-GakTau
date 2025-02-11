@@ -19,7 +19,6 @@ install(TARGETS
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
-add_executable(drone_controller_node src/drone_controller.cpp)
 ament_target_dependencies(drone_controller_node rclcpp rclcpp_action uav_interfaces)
 
 install(TARGETS

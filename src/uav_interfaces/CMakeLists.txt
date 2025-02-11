@@ -19,6 +19,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/AddObstacle.srv"
   "srv/AddVictim.srv"
   "action/RescueMission.action"
+  "srv/StartSimulation.srv"
+  "srv/StopSimulation.srv"
   DEPENDENCIES geometry_msgs
 )
 

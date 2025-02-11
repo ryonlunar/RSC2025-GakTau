@@ -12,3 +12,6 @@ ros2 action info /rescue_mission
 
 // Kirim perintah
 ros2 action send_goal /rescue_mission uav_interfaces/action/RescueMission "{target_x: 3, target_y: 4}"
+
+// Untuk launch
+ros2 launch uav_rescue uav_rescue_launch.py

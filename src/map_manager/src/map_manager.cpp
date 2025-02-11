@@ -5,6 +5,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "uav_interfaces/msg/map_state.hpp"
 #include "uav_interfaces/msg/drone_status.hpp"
+#include "uav_interfaces/srv/add_victim.hpp"
+#include "uav_interfaces/srv/add_obstacle.hpp"
 
 
 class MapManager : public rclcpp::Node
@@ -54,9 +56,22 @@ class MapManager : public rclcpp::Node
             path_visualization_sub_ = this->create_subscription<uav_interfaces::msg::MapState>(
                 "path_visualization", 10, std::bind(&MapManager::path_visualization_callback, this, std::placeholders::_1)
             );
+
+            add_victim_service_ = this->create_service<uav_interfaces::srv::AddVictim>(
+                "/add_victim",
+                std::bind(&MapManager::handle_add_victim, this, std::placeholders::_1, std::placeholders::_2)
+            );
+            
+            add_obstacle_service_ = this->create_service<uav_interfaces::srv::AddObstacle>(
+                "/add_obstacle",
+                std::bind(&MapManager::handle_add_obstacle, this, std::placeholders::_1, std::placeholders::_2)
+            );
         }
 
     private:
+    rclcpp::Service<uav_interfaces::srv::AddVictim>::SharedPtr add_victim_service_;
+    rclcpp::Service<uav_interfaces::srv::AddObstacle>::SharedPtr add_obstacle_service_;
+
         void drone_status_callback(const uav_interfaces::msg::DroneStatus::SharedPtr drone_message) const
         {   
             std::cout << "energi = " << drone_message->energy << std::endl;
@@ -88,6 +103,48 @@ class MapManager : public rclcpp::Node
                 std::cout << std::endl;
             }
             std::cout << "================\n" << std::endl;
+        }
+
+        void handle_add_victim(
+            const std::shared_ptr<uav_interfaces::srv::AddVictim::Request> request,
+            std::shared_ptr<uav_interfaces::srv::AddVictim::Response> response) {
+            
+            size_t idx = static_cast<size_t>(request->y) * map_state_message_.width + static_cast<size_t>(request->x);
+
+        
+            if (idx >= map_state_message_.grid_data.size()) {
+                response->success = false;
+                response->message = "Koordinat korban di luar batas peta!";
+                return;
+            }
+        
+            map_state_message_.grid_data[idx] = 4; // Tanda korban
+            RCLCPP_INFO(this->get_logger(), "Korban ditambahkan di (%d, %d)", request->x, request->y);
+        
+            response->success = true;
+            response->message = "Korban berhasil ditambahkan!";
+            map_state_pub_->publish(map_state_message_);
+        }
+        
+        void handle_add_obstacle(
+            const std::shared_ptr<uav_interfaces::srv::AddObstacle::Request> request,
+            std::shared_ptr<uav_interfaces::srv::AddObstacle::Response> response) {
+            
+            size_t idx = static_cast<size_t>(request->y) * map_state_message_.width + static_cast<size_t>(request->x);
+
+        
+            if (idx >= map_state_message_.grid_data.size()) {
+                response->success = false;
+                response->message = "Koordinat obstacle di luar batas peta!";
+                return;
+            }
+        
+            map_state_message_.grid_data[idx] = 3; // Tanda obstacle
+            RCLCPP_INFO(this->get_logger(), "Obstacle ditambahkan di (%d, %d)", request->x, request->y);
+        
+            response->success = true;
+            response->message = "Obstacle berhasil ditambahkan!";
+            map_state_pub_->publish(map_state_message_);
         }
 
         rclcpp::Publisher<uav_interfaces::msg::MapState>::SharedPtr map_state_pub_;
