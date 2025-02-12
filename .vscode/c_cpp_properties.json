@@ -3,11 +3,7 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**",
-                "/opt/ros/humble/include/**",
-                "/home/kloce/uav_rescue_ws/install/**",
-                "/home/kloce/uav_rescue_ws/src/**",
-                "/usr/include/**"
+                "${workspaceFolder}/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",
