@@ -12,6 +12,7 @@ find_package(rclcpp_action REQUIRED)
 find_package(uav_interfaces REQUIRED)
 
 add_executable(drone_controller_node src/drone_controller.cpp)
+
 install(TARGETS
   drone_controller_node
   DESTINATION lib/${PROJECT_NAME})
@@ -19,12 +20,6 @@ install(TARGETS
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
-ament_target_dependencies(drone_controller_node rclcpp rclcpp_action uav_interfaces)
-
-install(TARGETS
-  drone_controller_node
-  DESTINATION lib/${PROJECT_NAME}
-)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -38,6 +33,5 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-ament_target_dependencies(drone_controller_node rclcpp uav_interfaces)
-
+ament_target_dependencies(drone_controller_node rclcpp rclcpp_action uav_interfaces)
 ament_package()

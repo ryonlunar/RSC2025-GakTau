@@ -4,6 +4,9 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "uav_interfaces/msg/map_state.hpp"
+#include "uav_interfaces/msg/flag.hpp"
+
+using namespace std::chrono_literals;
 
 struct Node {
     int x, y;
@@ -182,32 +185,45 @@ public:
         // tandai posisi goal
         grid.path_numbers[grid.index(grid.goal_x, grid.goal_y)] = step;
     }
+
+    // const std::vector<int> focused_d_star(const uav_interfaces::msg::Flag::SharedPtr msg, Grid& grid, int gx, int gy, int sx, int sy) {
+    //     if (msg->simulation_flag){
+    //         flag_message_.simulation_flag = true;
+    //         grid.goal_x = gx;
+    //         grid.goal_y = gy;
+    //         grid.start_x = sx;
+    //         grid.start_y = sy;
+            
+    //         FocusedDStar algorithm(grid);
+    //         algorithm.run();
+    //         algorithm.extractPath();
+    //         flag_message_.found_path_flag = true;
+    //         flag_pub_->publish(flag_message_);
+    //         return grid.path_numbers;
+    //     }
+    // }
 };
 
-//panggil saat action
-
-const std::vector<int>& focusedDStar(Grid& grid, int gx, int gy, int sx, int sy) {
-    grid.goal_x = gx;
-    grid.goal_y = gy;
-    grid.start_x = sx;
-    grid.start_y = sy;
-    
-    FocusedDStar algorithm(grid);
-    algorithm.run();
-    algorithm.extractPath();
-    return grid.path_numbers;
-}
-
-class GridPubSub : public rclcpp::Node {
+class PathPlanner: public rclcpp::Node {
 public:
-    GridPubSub() : Node("grid_pub_sub") {
+    PathPlanner() : Node("path_planner") {
 
         path_visualization_pub_ = this->create_publisher<uav_interfaces::msg::MapState>("path_visualization", 10);
-
         map_state_sub_ = this->create_subscription<uav_interfaces::msg::MapState>(
-            "map_state", 10, std::bind(&GridPubSub::synchronizeGrid, this, std::placeholders::_1)
+            "map_state", 10, std::bind(&PathPlanner::synchronizeGrid, this, std::placeholders::_1)
         );
-   
+
+        flag_pub_ = this->create_publisher<uav_interfaces::msg::Flag>("flag", 10);
+
+        flag_sub_ = this->create_subscription<uav_interfaces::msg::Flag>(
+            "flag", 10, 
+            std::bind(&PathPlanner::focused_d_star, this, std::placeholders::_1)
+            
+        );
+
+        flag_message_.simulation_flag = false;
+        flag_message_.found_path_flag = false; 
+        
     }
 
 private:
@@ -216,7 +232,6 @@ private:
         grid.grid_data = msg->grid_data;
         grid.width = msg->width;
         grid.height = msg->height;
-
         // int sx = -1, sy = -1, gx = -1, gy = -1;
 
         // for (int y = 0; y < grid.height; ++y) {
@@ -237,16 +252,36 @@ private:
         message.width = grid.width;
         message.height = grid.height;
         path_visualization_pub_->publish(message);
+
+        if (flag_message_.simulation_flag) {
+            RCLCPP_INFO(this->get_logger(), "Updating path [SIMULATION]");
+        }
+
     }
+
+    void focused_d_star(const uav_interfaces::msg::Flag::SharedPtr msg) {
+        if(msg->simulation_flag && !msg->found_path_flag){
+            flag_message_.simulation_flag = msg->simulation_flag;
+            // lakukan algoritma focused d*
+            // jika sudah
+            flag_message_.found_path_flag = true;
+            flag_pub_->publish(flag_message_);
+        } 
+    }
+
 
     Grid grid = Grid(7, 7); // Contoh ukuran grid
     rclcpp::Publisher<uav_interfaces::msg::MapState>::SharedPtr path_visualization_pub_;
     rclcpp::Subscription<uav_interfaces::msg::MapState>::SharedPtr map_state_sub_;
+    rclcpp::Publisher<uav_interfaces::msg::Flag>::SharedPtr flag_pub_;
+    rclcpp::Subscription<uav_interfaces::msg::Flag>::SharedPtr flag_sub_;
+    uav_interfaces::msg::Flag flag_message_;
 };
+
 
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<GridPubSub>());
+    rclcpp::spin(std::make_shared<PathPlanner>());
     rclcpp::shutdown();
     return 0;
 }

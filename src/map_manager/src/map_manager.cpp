@@ -5,10 +5,13 @@
 #include "rclcpp/rclcpp.hpp"
 #include "uav_interfaces/msg/map_state.hpp"
 #include "uav_interfaces/msg/drone_status.hpp"
+#include "uav_interfaces/msg/flag.hpp"
 #include "uav_interfaces/srv/add_victim.hpp"
 #include "uav_interfaces/srv/add_obstacle.hpp"
 #include "queue_obs.hpp"
 #include "queue_vic.hpp"
+
+using namespace std::chrono_literals;
 
 class MapManager : public rclcpp::Node
 {
@@ -46,7 +49,7 @@ class MapManager : public rclcpp::Node
             map_state_message_.grid_data[16] = 3;
             map_state_message_.grid_data[17] = 3;
             
-           drone_status_sub_= this->create_subscription<uav_interfaces::msg::DroneStatus>(
+            drone_status_sub_= this->create_subscription<uav_interfaces::msg::DroneStatus>(
                 "drone_status", 10, std::bind(&MapManager::drone_status_callback, this, std::placeholders::_1)
             );
 
@@ -68,8 +71,16 @@ class MapManager : public rclcpp::Node
                 std::bind(&MapManager::handle_add_obstacle, this, std::placeholders::_1, std::placeholders::_2)
             );
 
+            flag_sub_ = this->create_subscription<uav_interfaces::msg::Flag>(
+                "flag", 10, std::bind(&MapManager::flag_callback, this, std::placeholders::_1)
+            );
+
+            flag_message_.simulation_flag = false;
+            flag_message_.found_path_flag = false; 
+
             obstacle_timer = this->create_wall_timer(std::chrono::milliseconds(100),std::bind(&MapManager::process_obstacle,this));
             victim_timer = this->create_wall_timer(std::chrono::milliseconds(100),std::bind(&MapManager::process_victim,this));
+
         }
 
     private:
@@ -84,9 +95,13 @@ class MapManager : public rclcpp::Node
 
         void drone_status_callback(const uav_interfaces::msg::DroneStatus::SharedPtr drone_message) const
         {   
+            if (flag_message_.simulation_flag){
+                RCLCPP_INFO(this->get_logger(), "SIMULATION");
+            }        
+
             std::cout << "energi = " << drone_message->energy << std::endl;
-            std::cout << "penumpang = " << drone_message->passengers << std::endl << std::endl;
-           map_state_pub_->publish(map_state_message_);
+            std::cout << "penumpang = " << drone_message->passengers << std::endl;
+            map_state_pub_->publish(map_state_message_);
         }
 
         void drone_position_callback(const uav_interfaces::msg::DroneStatus::SharedPtr drone_message)
@@ -109,6 +124,7 @@ class MapManager : public rclcpp::Node
             map_state_message_.path_numbers = msg->path_numbers;
             auto width = map_state_message_.width;
             auto height = map_state_message_.height;
+
             std::cout << "=== Grid Map ===" << std::endl;
             for (int y = 0; y < height; ++y) {
                 for (int x = 0; x < width; ++x) {
@@ -196,11 +212,20 @@ class MapManager : public rclcpp::Node
                 else break;
             }
         }
+
+        void flag_callback(const uav_interfaces::msg::Flag::SharedPtr msg) {
+            flag_message_.simulation_flag = msg->simulation_flag;
+            flag_message_.found_path_flag = msg->found_path_flag;
+        }
+
+        rclcpp::TimerBase::SharedPtr timer_;
         rclcpp::Publisher<uav_interfaces::msg::MapState>::SharedPtr map_state_pub_;
         uav_interfaces::msg::MapState map_state_message_;
         rclcpp::Subscription<uav_interfaces::msg::DroneStatus>::SharedPtr drone_status_sub_;
         rclcpp::Subscription<uav_interfaces::msg::DroneStatus>::SharedPtr drone_position_sub_;
         rclcpp::Subscription<uav_interfaces::msg::MapState>::SharedPtr path_visualization_sub_;
+        rclcpp::Subscription<uav_interfaces::msg::Flag>::SharedPtr flag_sub_;
+        uav_interfaces::msg::Flag flag_message_;
 };
 
 int main(int argc, char **argv) {

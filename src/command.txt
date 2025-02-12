@@ -24,3 +24,9 @@ ros2 service call /add_victim uav_interfaces/srv/AddVictim "{x: 5, y: 5, time: 5
 
 // Add Obstacle 
 ros2 service call /add_obstacle uav_interfaces/srv/AddObstacle "{x: 5, y: 5, time: 5.0}"
+
+// Untuk start simulation 
+ros2 service call /start_simulation uav_interfaces/srv/StartSimulation
+
+// Untuk stop simulation
+ros2 service call /stop_simulation uav_interfaces/srv/StopSimulation
