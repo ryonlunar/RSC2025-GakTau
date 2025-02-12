@@ -18,9 +18,21 @@ class MapManager : public rclcpp::Node
     public:
         MapManager()
         : Node("map_manager")
-        {
-           map_state_pub_ = this->create_publisher<uav_interfaces::msg::MapState>("map_state", 10);
-        
+        {   
+            //TOPIC drone_status, drone_position
+
+            drone_status_sub_= this->create_subscription<uav_interfaces::msg::DroneStatus>(
+                "drone_status", 10, std::bind(&MapManager::drone_status_callback, this, std::placeholders::_1)
+            );
+
+            drone_position_sub_= this->create_subscription<uav_interfaces::msg::DroneStatus>(
+                "drone_position", 10, std::bind(&MapManager::drone_position_callback, this, std::placeholders::_1)
+            );
+
+            //TOPIC map_state
+            map_state_pub_ = this->create_publisher<uav_interfaces::msg::MapState>("map_state", 10);
+            
+            //PARAMS and INITIALIZATION
             int initial_width = this->declare_parameter<int>("initial_width", 7);
             int initial_height = this->declare_parameter<int>("initial_height", 7);
             map_state_message_.width = initial_width;
@@ -48,18 +60,13 @@ class MapManager : public rclcpp::Node
             map_state_message_.grid_data[15] = 3;
             map_state_message_.grid_data[16] = 3;
             map_state_message_.grid_data[17] = 3;
-            
-            drone_status_sub_= this->create_subscription<uav_interfaces::msg::DroneStatus>(
-                "drone_status", 10, std::bind(&MapManager::drone_status_callback, this, std::placeholders::_1)
-            );
 
-            drone_position_sub_= this->create_subscription<uav_interfaces::msg::DroneStatus>(
-                "drone_position", 10, std::bind(&MapManager::drone_position_callback, this, std::placeholders::_1)
-            );
-
+            //TOPIC path_visualization
             path_visualization_sub_ = this->create_subscription<uav_interfaces::msg::MapState>(
                 "path_visualization", 10, std::bind(&MapManager::path_visualization_callback, this, std::placeholders::_1)
             );
+
+            //SERVICE /add_victim, /add_obstacle
 
             add_victim_service_ = this->create_service<uav_interfaces::srv::AddVictim>(
                 "/add_victim",
@@ -71,6 +78,10 @@ class MapManager : public rclcpp::Node
                 std::bind(&MapManager::handle_add_obstacle, this, std::placeholders::_1, std::placeholders::_2)
             );
 
+            obstacle_timer = this->create_wall_timer(std::chrono::milliseconds(100),std::bind(&MapManager::process_obstacle,this));
+            victim_timer = this->create_wall_timer(std::chrono::milliseconds(100),std::bind(&MapManager::process_victim,this));
+
+            //TOPIC FLAG
             flag_sub_ = this->create_subscription<uav_interfaces::msg::Flag>(
                 "flag", 10, std::bind(&MapManager::flag_callback, this, std::placeholders::_1)
             );
@@ -78,20 +89,13 @@ class MapManager : public rclcpp::Node
             flag_message_.simulation_flag = false;
             flag_message_.found_path_flag = false; 
 
-            obstacle_timer = this->create_wall_timer(std::chrono::milliseconds(100),std::bind(&MapManager::process_obstacle,this));
-            victim_timer = this->create_wall_timer(std::chrono::milliseconds(100),std::bind(&MapManager::process_victim,this));
-
         }
 
     private:
-    
-    std::priority_queue<obs> obs_queue_;
-    std::priority_queue<vic> vic_queue_;
-    rclcpp::Service<uav_interfaces::srv::AddVictim>::SharedPtr add_victim_service_;
-    rclcpp::Service<uav_interfaces::srv::AddObstacle>::SharedPtr add_obstacle_service_;
-    rclcpp::TimerBase::SharedPtr victim_timer;
-    rclcpp::TimerBase::SharedPtr obstacle_timer;
-    rclcpp::Time start_time_ = this->now();
+
+        //TOPIC drone_status, drone_position
+        rclcpp::Subscription<uav_interfaces::msg::DroneStatus>::SharedPtr drone_status_sub_;
+        rclcpp::Subscription<uav_interfaces::msg::DroneStatus>::SharedPtr drone_position_sub_;
 
         void drone_status_callback(const uav_interfaces::msg::DroneStatus::SharedPtr drone_message) const
         {   
@@ -117,6 +121,11 @@ class MapManager : public rclcpp::Node
 
         }
 
+        //TOPIC map_state, path_visualization
+        rclcpp::Publisher<uav_interfaces::msg::MapState>::SharedPtr map_state_pub_;
+        uav_interfaces::msg::MapState map_state_message_;
+        rclcpp::Subscription<uav_interfaces::msg::MapState>::SharedPtr path_visualization_sub_;
+
         void path_visualization_callback(const uav_interfaces::msg::MapState::SharedPtr msg) {
             map_state_message_.width = msg->width;
             map_state_message_.height = msg->height;
@@ -141,6 +150,24 @@ class MapManager : public rclcpp::Node
             }
             std::cout << "================\n" << std::endl;
         }
+
+        //TOPIC flag
+        rclcpp::Subscription<uav_interfaces::msg::Flag>::SharedPtr flag_sub_;
+        uav_interfaces::msg::Flag flag_message_;
+
+        void flag_callback(const uav_interfaces::msg::Flag::SharedPtr msg) {
+            flag_message_.simulation_flag = msg->simulation_flag;
+            flag_message_.found_path_flag = msg->found_path_flag;
+        }
+
+        //SERVICE /add_obstacle, /add_victim
+        std::priority_queue<obs> obs_queue_;
+        std::priority_queue<vic> vic_queue_;
+        rclcpp::Service<uav_interfaces::srv::AddVictim>::SharedPtr add_victim_service_;
+        rclcpp::Service<uav_interfaces::srv::AddObstacle>::SharedPtr add_obstacle_service_;
+        rclcpp::TimerBase::SharedPtr victim_timer;
+        rclcpp::TimerBase::SharedPtr obstacle_timer;
+        rclcpp::Time start_time_ = this->now();
 
         void handle_add_victim(
             const std::shared_ptr<uav_interfaces::srv::AddVictim::Request> request,
@@ -213,19 +240,6 @@ class MapManager : public rclcpp::Node
             }
         }
 
-        void flag_callback(const uav_interfaces::msg::Flag::SharedPtr msg) {
-            flag_message_.simulation_flag = msg->simulation_flag;
-            flag_message_.found_path_flag = msg->found_path_flag;
-        }
-
-        rclcpp::TimerBase::SharedPtr timer_;
-        rclcpp::Publisher<uav_interfaces::msg::MapState>::SharedPtr map_state_pub_;
-        uav_interfaces::msg::MapState map_state_message_;
-        rclcpp::Subscription<uav_interfaces::msg::DroneStatus>::SharedPtr drone_status_sub_;
-        rclcpp::Subscription<uav_interfaces::msg::DroneStatus>::SharedPtr drone_position_sub_;
-        rclcpp::Subscription<uav_interfaces::msg::MapState>::SharedPtr path_visualization_sub_;
-        rclcpp::Subscription<uav_interfaces::msg::Flag>::SharedPtr flag_sub_;
-        uav_interfaces::msg::Flag flag_message_;
 };
 
 int main(int argc, char **argv) {

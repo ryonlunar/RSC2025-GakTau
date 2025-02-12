@@ -208,25 +208,30 @@ class PathPlanner: public rclcpp::Node {
 public:
     PathPlanner() : Node("path_planner") {
 
-        path_visualization_pub_ = this->create_publisher<uav_interfaces::msg::MapState>("path_visualization", 10);
+        //TOPIC map_state, path_visualization
         map_state_sub_ = this->create_subscription<uav_interfaces::msg::MapState>(
             "map_state", 10, std::bind(&PathPlanner::synchronizeGrid, this, std::placeholders::_1)
         );
-
+        path_visualization_pub_ = this->create_publisher<uav_interfaces::msg::MapState>("path_visualization", 10);
+        
+        //TOPIC flag
         flag_pub_ = this->create_publisher<uav_interfaces::msg::Flag>("flag", 10);
-
         flag_sub_ = this->create_subscription<uav_interfaces::msg::Flag>(
             "flag", 10, 
             std::bind(&PathPlanner::focused_d_star, this, std::placeholders::_1)
             
         );
-
+        
+        //INITIALIZATION flag value
         flag_message_.simulation_flag = false;
         flag_message_.found_path_flag = false; 
-        
     }
 
 private:
+
+    //TOPIC map_state, path_visualization
+    rclcpp::Subscription<uav_interfaces::msg::MapState>::SharedPtr map_state_sub_;
+    rclcpp::Publisher<uav_interfaces::msg::MapState>::SharedPtr path_visualization_pub_;
 
     void synchronizeGrid(const uav_interfaces::msg::MapState::SharedPtr msg) {
         grid.grid_data = msg->grid_data;
@@ -259,6 +264,11 @@ private:
 
     }
 
+    //TOPIC flag
+    rclcpp::Publisher<uav_interfaces::msg::Flag>::SharedPtr flag_pub_;
+    rclcpp::Subscription<uav_interfaces::msg::Flag>::SharedPtr flag_sub_;
+    uav_interfaces::msg::Flag flag_message_;
+
     void focused_d_star(const uav_interfaces::msg::Flag::SharedPtr msg) {
         if(msg->simulation_flag && !msg->found_path_flag){
             flag_message_.simulation_flag = msg->simulation_flag;
@@ -269,13 +279,8 @@ private:
         } 
     }
 
-
+    //GRID (struktur data untuk map)
     Grid grid = Grid(7, 7); // Contoh ukuran grid
-    rclcpp::Publisher<uav_interfaces::msg::MapState>::SharedPtr path_visualization_pub_;
-    rclcpp::Subscription<uav_interfaces::msg::MapState>::SharedPtr map_state_sub_;
-    rclcpp::Publisher<uav_interfaces::msg::Flag>::SharedPtr flag_pub_;
-    rclcpp::Subscription<uav_interfaces::msg::Flag>::SharedPtr flag_sub_;
-    uav_interfaces::msg::Flag flag_message_;
 };
 
 
