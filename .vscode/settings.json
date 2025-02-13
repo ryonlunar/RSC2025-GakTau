@@ -125,7 +125,28 @@
     "thread": "cpp",
     "cinttypes": "cpp",
     "typeindex": "cpp",
-    "typeinfo": "cpp"
+    "typeinfo": "cpp",
+    "csignal": "cpp",
+    "strstream": "cpp",
+    "codecvt": "cpp",
+    "future": "cpp",
+    "shared_mutex": "cpp",
+    "cfenv": "cpp",
+    "variant": "cpp"
   },
-  "ros.distro": "humble"
+  "ros.distro": "humble",
+  "python.autoComplete.extraPaths": [
+    "/home/abrar/Aksan/RSC2025-GakTau/install/uav_interfaces/local/lib/python3.10/dist-packages",
+    "/home/abrar/ros2_ws/build/my_robot_controller",
+    "/home/abrar/ros2_ws/install/my_robot_controller/lib/python3.10/site-packages",
+    "/opt/ros/humble/lib/python3.10/site-packages",
+    "/opt/ros/humble/local/lib/python3.10/dist-packages"
+  ],
+  "python.analysis.extraPaths": [
+    "/home/abrar/Aksan/RSC2025-GakTau/install/uav_interfaces/local/lib/python3.10/dist-packages",
+    "/home/abrar/ros2_ws/build/my_robot_controller",
+    "/home/abrar/ros2_ws/install/my_robot_controller/lib/python3.10/site-packages",
+    "/opt/ros/humble/lib/python3.10/site-packages",
+    "/opt/ros/humble/local/lib/python3.10/dist-packages"
+  ]
 }

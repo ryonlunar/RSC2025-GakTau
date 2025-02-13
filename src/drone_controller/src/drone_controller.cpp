@@ -10,6 +10,8 @@
 #include "uav_interfaces/msg/flag.hpp"
 #include "uav_interfaces/srv/start_simulation.hpp"
 #include "uav_interfaces/srv/stop_simulation.hpp"
+#include "uav_interfaces/msg/map_state.hpp"
+
 
 using namespace std::chrono_literals;
 
@@ -74,6 +76,87 @@ private:
     rclcpp::Publisher<uav_interfaces::msg::DroneStatus>::SharedPtr drone_status_publisher_;
     uav_interfaces::msg::DroneStatus drone_message_;
     uav_interfaces::msg::DroneStatus drone_message_sim_;
+
+    void execute_rescue_mission(const std::shared_ptr<GoalHandleRescueMission> goal_handle) {
+        const auto goal = goal_handle->get_goal();
+        auto feedback = std::make_shared<RescueMission::Feedback>();
+        auto result = std::make_shared<RescueMission::Result>();
+        
+        // Set initial feedback
+        feedback->current_x = static_cast<int>(drone_message_.position.x);
+        feedback->current_y = static_cast<int>(drone_message_.position.y);
+        feedback->remaining_energy = drone_message_.energy;
+        feedback->current_passengers = drone_message_.passengers;
+        
+        // Publish feedback
+        goal_handle->publish_feedback(feedback);
+
+        // Set target dan mulai simulasi
+        flag_message_.simulation_flag = true;
+        flag_message_.found_path_flag = false;
+        flag_pub_->publish(flag_message_);
+
+        // Subscribe ke path untuk mendapatkan rute
+        auto path_sub = create_subscription<uav_interfaces::msg::MapState>(
+            "path_visualization", 10,
+            [this, goal_handle, feedback](const uav_interfaces::msg::MapState::SharedPtr path) {
+                follow_path(path, goal_handle, feedback);
+            });
+    }
+
+    void follow_path(const uav_interfaces::msg::MapState::SharedPtr path,
+                    const std::shared_ptr<GoalHandleRescueMission> goal_handle,
+                    std::shared_ptr<RescueMission::Feedback> feedback) {
+        // Find next position from path numbers
+        int current_x = static_cast<int>(drone_message_.position.x);
+        int current_y = static_cast<int>(drone_message_.position.y);
+        int current_idx = current_y * path->width + current_x;
+        int current_step = path->path_numbers[current_idx];
+        
+        // Find next position with step + 1
+        bool found_next = false;
+        for (const auto& [dx, dy] : std::vector<std::pair<int, int>>{{0,1}, {1,0}, {0,-1}, {-1,0}}) {
+            int next_x = current_x + dx;
+            int next_y = current_y + dy;
+            
+            if (next_x >= 0 && next_x < path->width && 
+                next_y >= 0 && next_y < path->height) {
+                int next_idx = next_y * path->width + next_x;
+                if (path->path_numbers[next_idx] == current_step + 1) {
+                    // Move drone
+                    drone_message_.position.x = next_x;
+                    drone_message_.position.y = next_y;
+                    drone_message_.energy -= 1.0; // Konsumsi energi per step
+                    
+                    // Update feedback
+                    feedback->current_x = next_x;
+                    feedback->current_y = next_y;
+                    feedback->remaining_energy = drone_message_.energy;
+                    feedback->current_passengers = drone_message_.passengers;
+                    goal_handle->publish_feedback(feedback);
+                    
+                    found_next = true;
+                    break;
+                }
+            }
+        }
+        
+        // Check if reached victim
+        if (path->grid_data[current_y * path->width + current_x] == 4) {
+            if (drone_message_.passengers < 5) {  // Max capacity
+                drone_message_.passengers++;
+            }
+        }
+        
+        // Check mission completion or failure
+        if (!found_next || drone_message_.energy <= 0) {
+            auto result = std::make_shared<RescueMission::Result>();
+            result->success = drone_message_.energy > 0;
+            result->message = result->success ? "Mission completed!" : "Mission failed: Out of energy";
+            goal_handle->succeed(result);
+        }
+    }
+
 
     void timer_callback() {
 
@@ -152,11 +235,7 @@ private:
     }
 
     void handle_accepted(const std::shared_ptr<GoalHandleRescueMission> goal_handle) {
-        RCLCPP_INFO(this->get_logger(), "Menjalankan rescue mission...");
-        auto result = std::make_shared<RescueMission::Result>();
-        result->success = true;
-        result->message = "Misi selesai!";
-        goal_handle->succeed(result);
+        std::thread{std::bind(&DroneController::execute_rescue_mission, this, goal_handle)}.detach();
     }
 };
 
