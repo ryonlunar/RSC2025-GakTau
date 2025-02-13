@@ -10,6 +10,7 @@
 #include "uav_interfaces/msg/flag.hpp"
 #include "uav_interfaces/srv/start_simulation.hpp"
 #include "uav_interfaces/srv/stop_simulation.hpp"
+#include "uav_interfaces/srv/update_drone_position.hpp" // Tambahkan include untuk service update posisi drone
 
 using namespace std::chrono_literals;
 
@@ -57,6 +58,9 @@ public:
             std::bind(&DroneController::handle_stop_simulation, this, std::placeholders::_1, std::placeholders::_2)
         );
 
+        // Tambahkan client service untuk memperbarui posisi drone
+        update_drone_position_client_ = this->create_client<uav_interfaces::srv::UpdateDronePosition>("/update_drone_position");
+
         //ACTIONS
         this->action_server_ = rclcpp_action::create_server<RescueMission>(
             this, "/rescue_mission",
@@ -75,9 +79,11 @@ private:
     uav_interfaces::msg::DroneStatus drone_message_;
     uav_interfaces::msg::DroneStatus drone_message_sim_;
 
-    void timer_callback() {
+    // Client untuk service update posisi drone
+    rclcpp::Client<uav_interfaces::srv::UpdateDronePosition>::SharedPtr update_drone_position_client_;
 
-        RCLCPP_INFO(this->get_logger(), "Publishing: drone position: (%f %f) | drone status: energi: %f penummpang: %d",
+    void timer_callback() {
+        RCLCPP_INFO(this->get_logger(), "Publishing: drone position: (%f %f) | drone status: energi: %f penumpang: %d",
             drone_message_.position.x, drone_message_.position.y, drone_message_.energy, drone_message_.passengers);
         drone_position_publisher_->publish(drone_message_);
         drone_status_publisher_->publish(drone_message_);
@@ -92,7 +98,6 @@ private:
     void found_path_callback(const uav_interfaces::msg::Flag::SharedPtr msg) {
         flag_message_.simulation_flag = msg->simulation_flag;
         flag_message_.found_path_flag = msg->found_path_flag;
-        //gerakan drone
     }
 
     //SERVICE /start_simulation dan /stop_simulation
@@ -105,14 +110,12 @@ private:
     ) {
         (void) request; // tidak digunakan
         flag_message_.simulation_flag = true;
-        drone_message_sim_ = drone_message_; //menyimpan nilai initial 
+        drone_message_sim_ = drone_message_; // Menyimpan nilai awal
         RCLCPP_INFO(this->get_logger(), "Menginisiasi nilai awal:\n" 
-            "energi awal : %f\npenumpang awal : %d\nKoordinat awal : (%f, %f)", drone_message_.energy, drone_message_.passengers,
+            "Energi awal: %f\nPenumpang awal: %d\nKoordinat awal: (%f, %f)", drone_message_.energy, drone_message_.passengers,
             drone_message_.position.x, drone_message_.position.y);
 
         RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Memulai simulasi");
-
-        // mekanisme untuk gagal simulasi apa ya? atau gausah?
 
         response->success = true;
         response->message = "Melakukan simulasi";
@@ -134,7 +137,7 @@ private:
         response->message = "Simulasi dihentikan";
         RCLCPP_INFO(this->get_logger(), response->message.c_str());
         timer_->cancel();
-        drone_message_ = drone_message_sim_; // ambil ulang nilai initial
+        drone_message_ = drone_message_sim_; // Ambil ulang nilai awal
     }
 
     //ACTIONS
@@ -153,11 +156,51 @@ private:
 
     void handle_accepted(const std::shared_ptr<GoalHandleRescueMission> goal_handle) {
         RCLCPP_INFO(this->get_logger(), "Menjalankan rescue mission...");
+
         auto result = std::make_shared<RescueMission::Result>();
-        result->success = true;
-        result->message = "Misi selesai!";
+        bool success = false;
+        int target_x = goal_handle->get_goal()->target_x;
+        int target_y = goal_handle->get_goal()->target_y;
+
+        // Gerakkan drone menuju korban
+        while (drone_message_.position.x != target_x || drone_message_.position.y != target_y) {
+            // Logika pergerakan drone ke korban (sederhana)
+            if (drone_message_.position.x < target_x) drone_message_.position.x++;
+            else if (drone_message_.position.x > target_x) drone_message_.position.x--;
+
+            if (drone_message_.position.y < target_y) drone_message_.position.y++;
+            else if (drone_message_.position.y > target_y) drone_message_.position.y--;
+
+            // Perbarui status peta dan drone
+            if (update_drone_position_client_->wait_for_service(1s)) {
+                auto request = std::make_shared<uav_interfaces::srv::UpdateDronePosition::Request>();
+                request->x = drone_message_.position.x;
+                request->y = drone_message_.position.y;
+                auto result = update_drone_position_client_->async_send_request(request);
+            }
+
+            drone_position_publisher_->publish(drone_message_);
+
+            // Cek jika sudah mencapai tujuan (korban)
+            if (drone_message_.position.x == target_x && drone_message_.position.y == target_y) {
+                // Asumsikan korban diselamatkan
+                success = true;
+                break;
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Simulasikan waktu pergerakan drone
+        }
+
+        if (success) {
+            result->success = true;
+            result->message = "Misi selesai! Korban diselamatkan!";
+        } else {
+            result->success = false;
+            result->message = "Misi gagal!";
+        }
+
         goal_handle->succeed(result);
-    }
+    }   
 };
 
 int main(int argc, char **argv) {
