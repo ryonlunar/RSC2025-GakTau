@@ -7,6 +7,9 @@ Sistem ini terdiri dari tiga paket utama:
 2. **PathPlanner** - Menggunakan algoritma D* untuk perencanaan jalur dinamis.
 3. **DroneController** - Mengatur pergerakan drone, energi, dan kapasitas penumpang.
 
+## **RQT Graph**
+![Alt Text](https://github.com/ryonlunar/RSC2025-GakTau/blob/main/S__8806440.jpg)
+
 ## **Cara Clone dan Build Proyek**
 
 ### **1. Clone Repository**
