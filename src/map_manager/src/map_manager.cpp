@@ -96,8 +96,10 @@ class MapManager : public rclcpp::Node
         //TOPIC drone_status, drone_position
         rclcpp::Subscription<uav_interfaces::msg::DroneStatus>::SharedPtr drone_status_sub_;
         rclcpp::Subscription<uav_interfaces::msg::DroneStatus>::SharedPtr drone_position_sub_;
+        bool has_initial_position_ = false;  // Cek apakah posisi awal sudah di-set
+        double initial_x_, initial_y_;       // Posisi awal drone
 
-        void drone_status_callback(const uav_interfaces::msg::DroneStatus::SharedPtr drone_message) const
+        void drone_status_callback(const uav_interfaces::msg::DroneStatus::SharedPtr drone_message)
         {   
             if (flag_message_.simulation_flag){
                 RCLCPP_INFO(this->get_logger(), "SIMULATION");
@@ -110,14 +112,23 @@ class MapManager : public rclcpp::Node
 
         void drone_position_callback(const uav_interfaces::msg::DroneStatus::SharedPtr drone_message)
         {   
-            // untuk ubah posisi drone lama jadi angka dihandle drone_controller 
-            // if (previous_x != drone_message->position.x && previous_y != drone_message->position.y){
-            //     map_state_message_.grid_data[previous_x * previous_y] = 9999; //posisi drone lama ditinggalkan menjadi path numbers
-            //     map_state_message_.grid_data[drone_message->position.x * drone_message->position.y] = 2; //posisi drone baru
-            //     previous_x = drone_message->position.x;
-            //     previous_y = drone_message->position.y;
-            // }
-            map_state_message_.grid_data[drone_message->position.x * drone_message->position.y] = 2; //posisi drone baru
+            RCLCPP_INFO(this->get_logger(), "Callback triggered! Received position: (%.2f, %.2f)", 
+                drone_message->position.x, drone_message->position.y);
+            if (!has_initial_position_) {
+                // Simpan posisi awal saat pertama kali menerima data
+                initial_x_ = drone_message->position.x;
+                initial_y_ = drone_message->position.y;
+                has_initial_position_ = true;
+                RCLCPP_INFO(this->get_logger(), "Initial position set: (%.2f, %.2f)", initial_x_, initial_y_);
+                map_state_message_.grid_data[initial_x_* map_state_message_.width + initial_y_] = 2;
+            }
+            else {
+                if(drone_message->position.x != initial_x_ || drone_message->position.y != initial_y_){
+                    map_state_message_.grid_data[drone_message->position.x * map_state_message_.width + drone_message->position.y] = 1; //posisi drone baru
+                }
+            }
+
+            map_state_pub_->publish(map_state_message_);
 
         }
 
@@ -134,6 +145,7 @@ class MapManager : public rclcpp::Node
             auto width = map_state_message_.width;
             auto height = map_state_message_.height;
 
+            RCLCPP_INFO(this->get_logger(), "Peta diupdate!");
             std::cout << "=== Grid Map ===" << std::endl;
             for (int y = 0; y < height; ++y) {
                 for (int x = 0; x < width; ++x) {

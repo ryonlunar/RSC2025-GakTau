@@ -1,288 +1,140 @@
-#include <queue>
+#include <memory>
 #include <vector>
+#include <queue>
 #include <cmath>
-
+#include <unordered_map>
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "uav_interfaces/msg/drone_status.hpp"
 #include "uav_interfaces/msg/map_state.hpp"
+#include "uav_interfaces/action/rescue_mission.hpp"
 #include "uav_interfaces/msg/flag.hpp"
 
-using namespace std::chrono_literals;
-
-struct Node {
+struct MyNode {
     int x, y;
-    double g;      // cost-to-come
-    double rhs;    // right-hand side value
-    std::array<double, 2> key; 
-    
-    bool operator>(const Node& other) const {
-        if (key[0] == other.key[0])
-            return key[1] > other.key[1];
-        return key[0] > other.key[0];
-    }
+    double g, rhs;
+    bool operator>(const MyNode& other) const { return g > other.g; }
 };
 
-struct Grid {
-    std::vector<int> grid_data;  // 1=d, 2=s, 3=o, 4=k
-    std::vector<int> path_numbers;
-    std::vector<std::vector<double>> heuristic;
-    std::unordered_map<int, Node> nodes;
-    int width, height;
-    int start_x, start_y, goal_x, goal_y;
-    double k_m; // accumulative cost change
-
-    Grid(int w, int h) : width(w), height(h), k_m(0) {
-        grid_data.resize(w * h, 0);
-        path_numbers.resize(w * h, 0);
-        heuristic.resize(h, std::vector<double>(w, 0.0));
-    }
-
-    int index(int x, int y) const { return y * width + x; }
-    
-    bool isValidCell(int x, int y) const {
-        return x >= 0 && x < width && y >= 0 && y < height;
-    }
-};
-
-class FocusedDStar {
-private:
-    Grid& grid;
-    std::priority_queue<Node, std::vector<Node>, std::greater<Node>> open_list;
-    const double INF = std::numeric_limits<double>::infinity();
-    
-    std::vector<std::pair<int, int>> directions = {{0,1}, {1,0}, {0,-1}, {-1,0}};
-
-    void computeHeuristic(int sx, int sy) {
-        for (int y = 0; y < grid.height; ++y) {
-            for (int x = 0; x < grid.width; ++x) {
-                grid.heuristic[y][x] = std::abs(sx - x) + std::abs(sy - y);
-            }
-        }
-    }
-
-    std::array<double, 2> calculateKey(const Node& node) {
-        double min_g_rhs = std::min(node.g, node.rhs);
-        return {
-            min_g_rhs + grid.heuristic[node.y][node.x] + grid.k_m,
-            min_g_rhs
-        };
-    }
-
-    void updateVertex(Node& node) {
-        // menghapus variabel idx yang tidak digunakan
-        if (node.g != node.rhs) {
-            node.key = calculateKey(node);
-            open_list.push(node);
-        }
-    }
-
-    double calculateRHS(int x, int y) {
-        if (x == grid.goal_x && y == grid.goal_y) return 0;
-        
-        double min_cost = INF;
-        for (auto [dx, dy] : directions) {
-            int nx = x + dx, ny = y + dy;
-            if (!grid.isValidCell(nx, ny)) continue;
-            if (grid.grid_data[grid.index(nx, ny)] == 3) continue; // skip obstacles
-            
-            int nidx = grid.index(nx, ny);
-            if (grid.nodes.find(nidx) == grid.nodes.end()) {
-                grid.nodes[nidx] = {nx, ny, INF, INF, {0, 0}};
-            }
-            
-            double cost = 1.0; // cost antar-eighbors
-            min_cost = std::min(min_cost, grid.nodes[nidx].g + cost);
-        }
-        return min_cost;
-    }
-
+class PathPlanner : public rclcpp::Node {
 public:
-    FocusedDStar(Grid& g) : grid(g) {}
+    using RescueMission = uav_interfaces::action::RescueMission;
+    using GoalHandleRescueMission = rclcpp_action::ClientGoalHandle<RescueMission>;
 
-    void initialize() {
-        // inisialisasi goal node
-        int goal_idx = grid.index(grid.goal_x, grid.goal_y);
-        grid.nodes[goal_idx] = {grid.goal_x, grid.goal_y, INF, 0, {0, 0}};
-        
-        // inisialisasi start node
-        int start_idx = grid.index(grid.start_x, grid.start_y);
-        grid.nodes[start_idx] = {grid.start_x, grid.start_y, INF, INF, {0, 0}};
-        
-        // update goal vertex
-        Node& goal_node = grid.nodes[goal_idx];
-        goal_node.key = calculateKey(goal_node);
-        open_list.push(goal_node);
-    }
-
-    void computePath() {
-        while (!open_list.empty()) {
-            Node current = open_list.top();
-            int curr_idx = grid.index(current.x, current.y);
-            
-            if (current.g <= current.rhs && 
-                current.x == grid.start_x && 
-                current.y == grid.start_y) break;
-                
-            open_list.pop();
-            
-            if (current.g > current.rhs) {
-                grid.nodes[curr_idx].g = current.rhs;
-            } else {
-                grid.nodes[curr_idx].g = INF;
-                updateVertex(grid.nodes[curr_idx]);
-            }
-            
-            // Update neighbors
-            for (auto [dx, dy] : directions) {
-                int nx = current.x + dx, ny = current.y + dy;
-                if (!grid.isValidCell(nx, ny)) continue;
-                
-                int nidx = grid.index(nx, ny);
-                if (grid.nodes.find(nidx) == grid.nodes.end()) {
-                    grid.nodes[nidx] = {nx, ny, INF, INF, {0, 0}};
-                }
-                
-                Node& neighbor = grid.nodes[nidx];
-                neighbor.rhs = calculateRHS(nx, ny);
-                updateVertex(neighbor);
-            }
-        }
-    }
-
-    void run() {
-        computeHeuristic(grid.start_x, grid.start_y);
-        initialize();
-        computePath();
-    }
-
-    void extractPath() {
-        int x = grid.start_x, y = grid.start_y;
-        int step = 1;
-    
-        while (x != grid.goal_x || y != grid.goal_y) {
-            grid.path_numbers[grid.index(x, y)] = step++;
-            
-            int best_x = x, best_y = y;
-            double min_g = std::numeric_limits<double>::infinity();
-    
-            // cek neighbors untuk menemukan `g` terkecil
-            for (auto [dx, dy] : std::vector<std::pair<int, int>>{{0,1}, {1,0}, {0,-1}, {-1,0}}) {
-                int nx = x + dx, ny = y + dy;
-                if (!grid.isValidCell(nx, ny)) continue;
-    
-                int nidx = grid.index(nx, ny);
-                if (grid.nodes.find(nidx) != grid.nodes.end() && grid.nodes[nidx].g < min_g) {
-                    min_g = grid.nodes[nidx].g;
-                    best_x = nx;
-                    best_y = ny;
-                }
-            }
-    
-            // update posisi ke node dengan g-value terendah
-            x = best_x;
-            y = best_y;
-        }
-    
-        // tandai posisi goal
-        grid.path_numbers[grid.index(grid.goal_x, grid.goal_y)] = step;
-    }
-
-    // const std::vector<int> focused_d_star(const uav_interfaces::msg::Flag::SharedPtr msg, Grid& grid, int gx, int gy, int sx, int sy) {
-    //     if (msg->simulation_flag){
-    //         flag_message_.simulation_flag = true;
-    //         grid.goal_x = gx;
-    //         grid.goal_y = gy;
-    //         grid.start_x = sx;
-    //         grid.start_y = sy;
-            
-    //         FocusedDStar algorithm(grid);
-    //         algorithm.run();
-    //         algorithm.extractPath();
-    //         flag_message_.found_path_flag = true;
-    //         flag_pub_->publish(flag_message_);
-    //         return grid.path_numbers;
-    //     }
-    // }
-};
-
-class PathPlanner: public rclcpp::Node {
-public:
     PathPlanner() : Node("path_planner") {
-
-        //TOPIC map_state, path_visualization
+        drone_position_sub_ = this->create_subscription<uav_interfaces::msg::DroneStatus>(
+            "drone_position", 10, std::bind(&PathPlanner::drone_position_callback, this, std::placeholders::_1));
+        
         map_state_sub_ = this->create_subscription<uav_interfaces::msg::MapState>(
-            "map_state", 10, std::bind(&PathPlanner::synchronizeGrid, this, std::placeholders::_1)
-        );
-        path_visualization_pub_ = this->create_publisher<uav_interfaces::msg::MapState>("path_visualization", 10);
+            "map_state", 10, std::bind(&PathPlanner::map_state_callback, this, std::placeholders::_1));
         
-        //TOPIC flag
+        rescue_goal_sub_ = this->create_subscription<uav_interfaces::action::RescueMission::Goal>(
+            "rescue_goal", 10, std::bind(&PathPlanner::goal_callback, this, std::placeholders::_1));
+        
+        flag_sub_= this->create_subscription<uav_interfaces::msg::Flag>(
+            "flag", 10, std::bind(&PathPlanner::flag_callback, this, std::placeholders::_1));
+
         flag_pub_ = this->create_publisher<uav_interfaces::msg::Flag>("flag", 10);
-        flag_sub_ = this->create_subscription<uav_interfaces::msg::Flag>(
-            "flag", 10, 
-            std::bind(&PathPlanner::focused_d_star, this, std::placeholders::_1)
             
-        );
-        
-        //INITIALIZATION flag value
-        flag_message_.simulation_flag = false;
-        flag_message_.found_path_flag = false; 
+        path_pub_ = this->create_publisher<uav_interfaces::msg::MapState>("path_visualization", 10);
     }
 
 private:
-
-    //TOPIC map_state, path_visualization
+    rclcpp::Subscription<uav_interfaces::msg::DroneStatus>::SharedPtr drone_position_sub_;
     rclcpp::Subscription<uav_interfaces::msg::MapState>::SharedPtr map_state_sub_;
-    rclcpp::Publisher<uav_interfaces::msg::MapState>::SharedPtr path_visualization_pub_;
-
-    void synchronizeGrid(const uav_interfaces::msg::MapState::SharedPtr msg) {
-        grid.grid_data = msg->grid_data;
-        grid.width = msg->width;
-        grid.height = msg->height;
-        // int sx = -1, sy = -1, gx = -1, gy = -1;
-
-        // for (int y = 0; y < grid.height; ++y) {
-        //     for (int x = 0; x < grid.width; ++x) {
-        //         int idx = grid.index(x, y);
-        //         if (grid.grid_data[idx] == 2) { sx = x; sy = y; }
-        //         if (grid.grid_data[idx] == 4) { gx = x; gy = y; }
-        //     }
-        // }
-
-        publishPath(); // publish path (menampilkan dan update map tiap 0.5 detik)
-    }
-
-    void publishPath() {
-        auto message = uav_interfaces::msg::MapState();
-        message.grid_data = grid.grid_data;
-        message.path_numbers = grid.path_numbers;
-        message.width = grid.width;
-        message.height = grid.height;
-        path_visualization_pub_->publish(message);
-
-        if (flag_message_.simulation_flag) {
-            RCLCPP_INFO(this->get_logger(), "Updating path [SIMULATION]");
-        }
-
-    }
-
-    //TOPIC flag
-    rclcpp::Publisher<uav_interfaces::msg::Flag>::SharedPtr flag_pub_;
+    rclcpp::Subscription<uav_interfaces::action::RescueMission::Goal>::SharedPtr rescue_goal_sub_;
     rclcpp::Subscription<uav_interfaces::msg::Flag>::SharedPtr flag_sub_;
-    uav_interfaces::msg::Flag flag_message_;
+    rclcpp::Publisher<uav_interfaces::msg::Flag>::SharedPtr flag_pub_;
+    rclcpp::Subscription<uav_interfaces::msg::MapState>::SharedPtr path_sub_;
+    rclcpp::Publisher<uav_interfaces::msg::MapState>::SharedPtr path_pub_;
 
-    void focused_d_star(const uav_interfaces::msg::Flag::SharedPtr msg) {
-        if(msg->simulation_flag && !msg->found_path_flag){
-            flag_message_.simulation_flag = msg->simulation_flag;
-            // lakukan algoritma focused d*
-            // jika sudah
-            flag_message_.found_path_flag = true;
-            flag_pub_->publish(flag_message_);
-        } 
+    uav_interfaces::msg::DroneStatus current_drone_position_;
+    uav_interfaces::msg::MapState current_map_state_;
+    RescueMission::Goal current_goal_;
+
+    std::priority_queue<MyNode, std::vector<MyNode>, std::greater<MyNode>> open_list_;
+    std::unordered_map<int, std::unordered_map<int, MyNode>> nodes_;
+
+    bool start_flag_ = false;
+
+    void drone_position_callback(const uav_interfaces::msg::DroneStatus::SharedPtr msg) {
+        current_drone_position_ = msg;
+        plan_path();
     }
 
-    //GRID (struktur data untuk map)
-    Grid grid = Grid(7, 7); // Contoh ukuran grid
-};
+    void map_state_callback(const uav_interfaces::msg::MapState::SharedPtr msg) {
+        current_map_state_ = msg;
+        if( !start_flag_) {
+            path_pub_->publish(msg); 
+        } else {
+            plan_path();
+        }
+    }
 
+    void goal_callback(const uav_interfaces::action::RescueMission::Goal::SharedPtr msg) {
+        current_goal_ = msg;
+        RCLCPP_INFO(this->get_logger(), "Goal diterima: (%d, %d)", 
+                    current_goal_.target_x, current_goal_.target_y);
+    }
+
+    void flag_callback(const uav_interfaces::msg::Flag::SharedPtr msg) {
+        start_flag_ = msg->start_flag;
+    }
+    
+    void plan_path() {
+        if (!start_flag_) return; 
+        RCLCPP_INFO(this->get_logger(), "Menggunakan Focused D* untuk mencari jalur dari (%d, %d) ke (%d, %d)", 
+            current_drone_position_.position.x, current_drone_position_.position.y, 
+            current_goal_.target_x, current_goal_.target_y);
+        
+        MyNode start{current_drone_position_.position.x, current_drone_position_.position.y, 0, 0};
+        MyNode goal{current_goal_.target_x, current_goal_.target_y, INFINITY, 0};
+        
+        nodes_[goal.x][goal.y] = goal;
+        nodes_[start.x][start.y] = start;
+        open_list_.push(goal);
+        
+        while (!open_list_.empty()) {
+            MyNode current = open_list_.top();
+            open_list_.pop();
+            
+            if (current.x == start.x && current.y == start.y) break;
+            
+            for (const auto& [dx, dy] : std::vector<std::pair<int, int>>{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+                int nx = current.x + dx;
+                int ny = current.y + dy;
+                if (nx < 0 || ny < 0 || nx >= current_map_state_.width || ny >= current_map_state_.height) continue;
+                
+                if (current_map_state_.grid_data[nx + ny * current_map_state_.width] == 3) continue;
+                
+                double new_cost = current.g + 1;
+                if (nodes_[nx][ny].g > new_cost) {
+                    nodes_[nx][ny] = {nx, ny, new_cost, new_cost};
+                    open_list_.push(nodes_[nx][ny]);
+                }
+            }
+        }
+        
+        uav_interfaces::msg::MapState planned_path;
+        MyNode current = nodes_[start.x][start.y];
+        while (!(current.x == goal.x && current.y == goal.y)) {
+            planned_path.path_numbers.push_back(current.x + current.y * current_map_state_.width);
+            current = nodes_[current.x + 1][current.y];
+            std::cout << current.x << " " << current.y << std::endl;
+        }
+        planned_path.path_numbers.push_back(goal.x + goal.y * current_map_state_.width);
+        planned_path.grid_data = current_map_state_.grid_data;
+        planned_path.width = current_map_state_.width;
+        planned_path.height = current_map_state_.height;
+        path_pub_->publish(planned_path);
+
+        uav_interfaces::msg::Flag flag_message;
+        flag_message.start_flag = false;
+        flag_message.found_path_flag = true;
+        flag_message.simulation_flag = true;
+        flag_pub_->publish(flag_message);
+    }
+};
 
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);

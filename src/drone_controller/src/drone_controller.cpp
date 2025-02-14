@@ -36,8 +36,10 @@ public:
         int initial_passengers = this->declare_parameter<int>("initial_passengers", 5);
         float initial_x = this->declare_parameter<float>("initial_x", 1.0);
         float initial_y = this->declare_parameter<float>("initial_y", 5.0);
+
         bool initial_sim_flag = this->declare_parameter<bool>("initial_sim_flag", false);
         bool initial_found_path_flag = this->declare_parameter<bool>("initial_found_path_flag", false);
+        bool initial_start_flag = this->declare_parameter<bool>("initial_start_flag", false);
         
         //INITIALIZATION
         drone_message_.position.x = initial_x;
@@ -46,6 +48,7 @@ public:
         drone_message_.passengers = initial_passengers;
         flag_message_.simulation_flag = initial_sim_flag;
         flag_message_.found_path_flag = initial_found_path_flag;
+        flag_message_.start_flag = initial_start_flag;
 
         //SERVICE
         start_simulation_service_ = this->create_service<uav_interfaces::srv::StartSimulation>(
@@ -74,6 +77,7 @@ private:
     rclcpp::Publisher<uav_interfaces::msg::DroneStatus>::SharedPtr drone_status_publisher_;
     uav_interfaces::msg::DroneStatus drone_message_;
     uav_interfaces::msg::DroneStatus drone_message_sim_;
+    bool found_plan = false;
 
     void timer_callback() {
 
@@ -92,7 +96,14 @@ private:
     void found_path_callback(const uav_interfaces::msg::Flag::SharedPtr msg) {
         flag_message_.simulation_flag = msg->simulation_flag;
         flag_message_.found_path_flag = msg->found_path_flag;
-        //gerakan drone
+        if(msg->found_path_flag) {
+            RCLCPP_INFO(this->get_logger(), "Path ditemukan!");
+            found_plan = true;
+        }
+        else {
+            RCLCPP_INFO(this->get_logger(), "Path belum ditemukan");
+            found_plan = false;
+        }
     }
 
     //SERVICE /start_simulation dan /stop_simulation
@@ -120,6 +131,10 @@ private:
         timer_ = this->create_wall_timer(
             500ms, std::bind(&DroneController::timer_callback, this)
         );
+
+        drone_position_publisher_->publish(drone_message_);
+        drone_status_publisher_->publish(drone_message_);
+        flag_pub_->publish(flag_message_);
     }
 
     void handle_stop_simulation(
@@ -142,6 +157,7 @@ private:
 
     rclcpp_action::GoalResponse handle_goal(const rclcpp_action::GoalUUID &, std::shared_ptr<const RescueMission::Goal> goal) {
         RCLCPP_INFO(this->get_logger(), "Menerima permintaan rescue ke (%d, %d)", goal->target_x, goal->target_y);
+
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     }
 
@@ -154,10 +170,17 @@ private:
     void handle_accepted(const std::shared_ptr<GoalHandleRescueMission> goal_handle) {
         RCLCPP_INFO(this->get_logger(), "Menjalankan rescue mission...");
         auto result = std::make_shared<RescueMission::Result>();
-        result->success = true;
-        result->message = "Misi selesai!";
-        goal_handle->succeed(result);
+
+        flag_message_.start_flag = true;
+            if (found_plan) {
+                result->success = true;
+                result->message = "Misi selesai!";
+                goal_handle->succeed(result);
+                
+                RCLCPP_INFO(this->get_logger(), "Rescue mission selesai!");
+            }
     }
+
 };
 
 int main(int argc, char **argv) {

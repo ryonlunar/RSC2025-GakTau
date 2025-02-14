@@ -8,6 +8,7 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(uav_interfaces REQUIRED)
 find_package(drone_controller REQUIRED)
 
@@ -32,5 +33,5 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-ament_target_dependencies(path_planner_node rclcpp uav_interfaces drone_controller)
+ament_target_dependencies(path_planner_node rclcpp uav_interfaces drone_controller rclcpp_action)
 ament_package()
