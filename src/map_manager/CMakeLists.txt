@@ -7,6 +7,15 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(uav_interfaces REQUIRED)
+find_package(drone_controller REQUIRED)
+
+add_executable(map_manager_node src/map_manager.cpp)
+install(TARGETS
+  map_manager_node
+  DESTINATION lib/${PROJECT_NAME})
+
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
@@ -23,4 +32,5 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+ament_target_dependencies(map_manager_node rclcpp uav_interfaces drone_controller)
 ament_package()

@@ -1,0 +1,3 @@
+bool simulation_flag
+bool found_path_flag
+bool start_flag

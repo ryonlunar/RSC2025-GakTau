@@ -5,7 +5,7 @@ def generate_launch_description():
     return LaunchDescription([
         Node(
             package="map_manager",
-            executable="map_node",
+            executable="map_manager_node",
             name="map_manager",
             output="screen"
         ),

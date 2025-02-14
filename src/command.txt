@@ -1,0 +1,32 @@
+// Untuk build satu packages
+colcon build --packages-select <nama_package>
+
+// Untuk build semua
+colcon build 
+
+// Untuk run
+ros2 run <nama_package> <nama_package>_node
+
+-> Buka terminal baru
+// Untuk cek action
+ros2 action list
+// Untuk cek tipe action
+ros2 action info /rescue_mission
+
+// Kirim perintah
+ros2 action send_goal /rescue_mission uav_interfaces/action/RescueMission "{target_x: 3, target_y: 4}"
+
+// Untuk launch
+ros2 launch uav_rescue uav_rescue_launch.py
+
+// Add Victim
+ros2 service call /add_victim uav_interfaces/srv/AddVictim "{x: 5, y: 5, time: 5.0}"
+
+// Add Obstacle 
+ros2 service call /add_obstacle uav_interfaces/srv/AddObstacle "{x: 5, y: 5, time: 5.0}"
+
+// Untuk start simulation 
+ros2 service call /start_simulation uav_interfaces/srv/StartSimulation
+
+// Untuk stop simulation
+ros2 service call /stop_simulation uav_interfaces/srv/StopSimulation

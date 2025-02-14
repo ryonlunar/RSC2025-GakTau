@@ -16,9 +16,12 @@ find_package(geometry_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/DroneStatus.msg"
   "msg/MapState.msg"
+  "msg/Flag.msg"
   "srv/AddObstacle.srv"
   "srv/AddVictim.srv"
   "action/RescueMission.action"
+  "srv/StartSimulation.srv"
+  "srv/StopSimulation.srv"
   DEPENDENCIES geometry_msgs
 )
 
