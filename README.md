@@ -53,7 +53,7 @@ ros2 run drone_controller drone_controller_node
 Gunakan service call untuk menambahkan obstacle atau korban saat simulasi berjalan:
 ```bash
 ros2 service call /add_obstacle uav_interfaces/srv/AddObstacle "{x: 5, y: 6, time: 10.0}"
-ros2 service call /add_victim uav_interfaces/srv/AddVictim "{x: 3, y: 4, time: 5.0, priority: 1}"
+ros2 service call /add_victim uav_interfaces/srv/AddVictim "{x: 3, y: 4, time: 5.0}"
 ```
 
 ### **7. Menjalankan Misi Penyelamatan**
